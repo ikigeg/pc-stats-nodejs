@@ -8,7 +8,7 @@ This is a quick and dirty app to record stats from your windows pc and push them
    - make sure to set it to `Run on Windows Startup`
 2. Install Node.js https://nodejs.org/en/download/
 3. Install PM2
- - open a new powershell window and run `npm install -g pm2`
+   - open a new powershell window and run `npm install -g pm2`
 4. Create a free influxdb cloud account https://cloud2.influxdata.com/signup
 5. Create a free grafana cloud account https://grafana.com/get/
 6. Download this repo and extract it to a folder on your computer
