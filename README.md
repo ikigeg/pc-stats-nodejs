@@ -38,11 +38,11 @@ Our goal here is to have the script startup with window automatically, so first 
 ```
 C:\dev\projects\pc-stats-nodejs\startup.ps1
 ```
-, but you need to edit it to be 
-``
-`%SystemRoot%\system32\WindowsPowerShell\v1.0\powershell.exe -File "C:\dev\projects\iki-stats-nodejs\startup.ps1"
+but you need to edit it to be 
 ```
-taking care to wrap the original file name in `"`
+%SystemRoot%\system32\WindowsPowerShell\v1.0\powershell.exe -File "C:\dev\projects\iki-stats-nodejs\startup.ps1"
+```
+taking care to wrap the original file name in double quotes `"`
 
 And that should be it... hopefully! You can try restarting the pc and seeing if it worked :D
 
