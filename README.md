@@ -34,7 +34,15 @@ Our goal here is to have the script startup with window automatically, so first 
 - enter `shell:startup` and click `Ok` and your startup folder will open
 - also open a new explorer window and browse to the repo folder
 - right-click and drag the `startup.ps1` file to the startup folder and choose `Create shortcuts here`
-- Right click and edit the new shortcut, the target will look like ```C:\dev\projects\pc-stats-nodejs\startup.ps1```, but you need to edit it to be ```%SystemRoot%\system32\WindowsPowerShell\v1.0\powershell.exe -File "C:\dev\projects\iki-stats-nodejs\startup.ps1"``` taking care to wrap the original file name in `"`
+- Right click and edit the new shortcut, the target will look like 
+```
+C:\dev\projects\pc-stats-nodejs\startup.ps1
+```
+, but you need to edit it to be 
+``
+`%SystemRoot%\system32\WindowsPowerShell\v1.0\powershell.exe -File "C:\dev\projects\iki-stats-nodejs\startup.ps1"
+```
+taking care to wrap the original file name in `"`
 
 And that should be it... hopefully! You can try restarting the pc and seeing if it worked :D
 
