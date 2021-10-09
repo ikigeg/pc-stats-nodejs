@@ -28,7 +28,7 @@ Next go to `Data > API Tokens`, click the button on the right to `Generate API T
 Our goal here is to have the script startup with window automatically, so first we need to tell PM2 where the script is.
 
 - In a new powershell window, navigate into the repo folder that you downloaded earlier
-- run `pm2 index.js --name pc-stats` to start the app
+- run `pm2 start index.js --name pc-stats` to start the app
 - next run `pm2 save` which will record this config
 - now press the windows key and `r` to open the run dialog
 - enter `shell:startup` and click `Ok` and your startup folder will open
