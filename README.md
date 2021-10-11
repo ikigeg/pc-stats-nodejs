@@ -89,6 +89,6 @@ from(bucket: "pc-stats-nodejs")
   |> yield(name: "mean")
 ```
 
-## Bonus
+## Bonus (Removed because of stupid uws in github issues)
 
 This app also has a little websockets webserver baked in that will respond to requests with a little subset of the last data recorded... I am using this for a mini oled arduino dashboard - i'll post that as a separate project.

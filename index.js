@@ -4,7 +4,7 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const { InfluxDB, Point } = require('@influxdata/influxdb-client');
-const uWS = require('uWebSockets.js');
+// const uWS = require('uWebSockets.js');
 const slugify = require('slugify');
 
 const { INFLUX_URL, INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET, INFLUX_TAG_HOSTNAME, INFLUX_WRITE_ENABLED } = process.env;
@@ -115,29 +115,29 @@ let timerId = setTimeout(async function tick() {
   timerId = setTimeout(tick, 4000);
 }, 2000);
 
-const app = uWS.App().ws('/*', { 
-  compression: uWS.SHARED_COMPRESSOR,
-  maxPayloadLength: 16 * 1024 * 1024,
-  idleTimeout: 12,
-  open: (ws) => {
-    console.log('A WebSocket connected!');
-  },
-  message: (ws, message, isBinary) => {
-    /* Ok is false if backpressure was built up, wait for drain */
-    let ok = ws.send(JSON.stringify({ sysStats, dataPoints }), false);
-  },
-  drain: (ws) => {
-    console.log('WebSocket backpressure: ' + ws.getBufferedAmount());
-  },
-  close: (ws, code, message) => {
-    console.log('WebSocket closed');
-  }
-});
-app.listen(9001, (listenSocket) => {
-  if (listenSocket) {
-    console.log('Listening to port 9001');
-  }
-});
+// const app = uWS.App().ws('/*', { 
+//   compression: uWS.SHARED_COMPRESSOR,
+//   maxPayloadLength: 16 * 1024 * 1024,
+//   idleTimeout: 12,
+//   open: (ws) => {
+//     console.log('A WebSocket connected!');
+//   },
+//   message: (ws, message, isBinary) => {
+//     /* Ok is false if backpressure was built up, wait for drain */
+//     let ok = ws.send(JSON.stringify({ sysStats, dataPoints }), false);
+//   },
+//   drain: (ws) => {
+//     console.log('WebSocket backpressure: ' + ws.getBufferedAmount());
+//   },
+//   close: (ws, code, message) => {
+//     console.log('WebSocket closed');
+//   }
+// });
+// app.listen(9001, (listenSocket) => {
+//   if (listenSocket) {
+//     console.log('Listening to port 9001');
+//   }
+// });
 
 async function onShutdown() {
   clearInterval(timerId)
