@@ -34,6 +34,7 @@ async function getJsonFromCmd(cmd, opts = { shell: 'powershell.exe', windowsHide
 
 const dataPoints = {};
 let sysStats = {};
+let hasWritten = false;
 
 const totalDataPoints = 10;
 const splitStats = stats => {
@@ -45,6 +46,10 @@ const splitStats = stats => {
     } 
     dataPoints[key].push(value)
   };
+
+  if (!hasWritten) {
+    hasWritten = true;
+  }
 }
 
 function createPoint(measurement, usage) {
@@ -102,6 +107,10 @@ const getStats = async () => {
       }));
 
       writeProcessUsage(slugify(Name, { strict: true, lower: true }));
+    }
+
+    if (!hasWritten) {
+      console.log('Successfully did a thing, yay!', new Date());
     }
 
     splitStats(sysStats);
