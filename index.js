@@ -74,10 +74,12 @@ const writeProcessUsage = (processName) => {
 }
 
 const getStats = async () => {
+  let Name;
+
   try {
     const date = new Date();
     const topProcess = await getJsonFromCmd(processesQuery);
-    const { Name } = await getJsonFromCmd(processNameQuery(topProcess.IDProcess));
+    ({ Name } = await getJsonFromCmd(processNameQuery(topProcess.IDProcess)));
     const sysStatsRaw = await getJsonFromCmd(sysStatsQuery);
     sysStats = sysStatsRaw.reduce((acc, cv) => {
       const type = cv.Parent.includes('intelcpu') ? 'cpu' : 'gpu';
@@ -93,7 +95,11 @@ const getStats = async () => {
       topProcessPid: topProcess.IDProcess,
       dateTime: date.toJSON(),
     });
+  } catch (error) {
+    console.log('Error reading stats from WMI - check Open Hardware Monitor is running', error);
+  }
 
+  try {
     if (INFLUX_WRITE_ENABLED) {
       writeApi.writePoint(createPoint('gpu', {
         temp: sysStats.gpuTempVal,
@@ -108,15 +114,20 @@ const getStats = async () => {
 
       writeProcessUsage(slugify(Name, { strict: true, lower: true }));
     }
-
-    if (!hasWritten) {
-      console.log('Successfully did a thing, yay!', new Date());
-    }
-
-    splitStats(sysStats);
   } catch (error) {
-    console.log('Error getting stats', error);
+    console.log('Error sending stats to influx', error);
   }
+
+  if (!hasWritten) {
+    console.log('Successfully did a thing, yay!', date);
+  }
+
+  try {
+    splitStats(sysStats);
+  } catch (err) {
+    console.log('Error splitting the stats', error);
+  }
+  
 }
 
 let timerId = setTimeout(async function tick() {
