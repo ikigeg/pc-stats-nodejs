@@ -62,7 +62,7 @@ Everything (replace "pc-stats-nodejs" with your bucket name):
 from(bucket: "pc-stats-nodejs")
   |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
   |> filter(fn: (r) => r["_measurement"] == "cpu" or r["_measurement"] == "gpu" or r["type"] == "process")
-  |> filter(fn: (r) => r["_field"] == "load" or r["_field"] == "power" or r["_field"] == "temp" or r["_field"] == "value")
+  |> filter(fn: (r) => r["_field"] == "load" or r["_field"] == "power" or r["_field"] == "temp" or r["_field"] == "cpu" or r["_field"] == "ram")
   |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
   |> yield(name: "mean")
 ```
@@ -73,7 +73,7 @@ This is just the cpu stats (replace "pc-stats-nodejs" with your bucket name):
 from(bucket: "pc-stats-nodejs")
   |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
   |> filter(fn: (r) => r["_measurement"] == "cpu")
-  |> filter(fn: (r) => r["_field"] == "load" or r["_field"] == "power" or r["_field"] == "temp" or r["_field"] == "value")
+  |> filter(fn: (r) => r["_field"] == "load" or r["_field"] == "power" or r["_field"] == "temp" or r["_field"] == "fan")
   |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
   |> yield(name: "mean")
 ```
@@ -84,7 +84,18 @@ And this is the gpu stats (replace "pc-stats-nodejs" with your bucket name):
 from(bucket: "pc-stats-nodejs")
   |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
   |> filter(fn: (r) => r["_measurement"] == "gpu")
-  |> filter(fn: (r) => r["_field"] == "load" or r["_field"] == "power" or r["_field"] == "temp" or r["_field"] == "value")
+  |> filter(fn: (r) => r["_field"] == "load" or r["_field"] == "power" or r["_field"] == "temp" or r["_field"] == "fan")
+  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
+  |> yield(name: "mean")
+```
+
+And this is just the active processes:
+
+```
+from(bucket: "iki-pc-snek")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["type"] == "process")
+  |> filter(fn: (r) => r["_field"] == "cpu" or r["_field"] == "ram")
   |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
   |> yield(name: "mean")
 ```

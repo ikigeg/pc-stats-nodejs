@@ -8,6 +8,11 @@ const { InfluxDB, Point } = require('@influxdata/influxdb-client');
 const slugify = require('slugify');
 
 const { INFLUX_URL, INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET, INFLUX_TAG_HOSTNAME, INFLUX_WRITE_ENABLED } = process.env;
+const STATUS = {
+  NEW: 'new',
+  EXISTS: 'exists',
+  RIP: 'rip',
+};
 
 const client = new InfluxDB({ url: INFLUX_URL, token: INFLUX_TOKEN });
 const writeApi = client.getWriteApi(INFLUX_ORG, INFLUX_BUCKET);
@@ -20,24 +25,27 @@ const sysStatsWql = 'select ' + sysStatsFields + ' from Sensor ' +
   'where (' + sysNames.map(n => `Name = "${n}"`).join(' or ') + ') ' +
   'and (' + sysSensorTypes.map(t => `SensorType = "${t}"`).join(' or ') + ')';
 const sysStatsQuery = `get-wmiobject -namespace root\\OpenHardwareMonitor -query '${sysStatsWql}' | select-object ${sysStatsFields}`;
-console.log('sysStatsQuery', sysStatsQuery);
 
-const processesQuery = 'Get-WmiObject Win32_PerfFormattedData_PerfProc_Process' + 
-'| where-object{ $_.Name -ne "_Total" -and $_.Name -ne "Idle"}' +
-'| Sort-Object PercentProcessorTime -Descending' +
-'| select -First 1' +
-'| select-object Name,IDProcess,PercentProcessorTime';
-const processNameQuery = pid => `get-process | where-object {$_.ID -eq "${pid}"} | select-object Name`;
+const totalProcessorsQuery = `get-wmiobject -query 'select NumberOfLogicalProcessors from Win32_ComputerSystem' | select-object NumberOfLogicalProcessors`;
+const processesQueryV2 = '(Get-Counter "\\Process($Processname*)\\% Processor Time").CounterSamples ' +
+'| where-object{ $_.CookedValue -gt 0 -and $_.InstanceName -ne "Idle" -and $_.InstanceName -ne "_total"}' +
+'| select-object InstanceName,CookedValue';
 
 async function getJsonFromCmd(cmd, opts = { shell: 'powershell.exe', windowsHide: true }) {
   const result = await execAsync(cmd + '| ConvertTo-Json  -Compress', opts);
   return JSON.parse(result.stdout);
 }
 
+const totalDataPoints = 10;
 const dataPoints = {};
 let hasWritten = false;
+let date;
+let sysStats = {};
+let totalProcessors;
+let lastProcesses = [];
+let processorActivity = {};
+let topProcessName = '';
 
-const totalDataPoints = 10;
 const splitStats = stats => {
   for (const [key, value] of Object.entries(stats)) {
     if (!dataPoints[key]) {
@@ -47,42 +55,74 @@ const splitStats = stats => {
     } 
     dataPoints[key].push(value)
   };
-
-  if (!hasWritten) {
-    hasWritten = true;
-  }
 }
 
-function createPoint(measurement, usage) {
+function createPoint(measurement, usage, type) {
   const point = new Point(measurement)
   for (const key of Object.keys(usage)) {
     point.floatField(key, usage[key])
   }
-  return point
+  if (type) {
+    point.tag('type', type);
+  }
+  return point;
 }
 
-let lastProcess = '';
-let Name;
-let date;
-let sysStats = {};
-const writeProcessUsage = (processName) => {
-  if (lastProcess === '') {
-    writeApi.writePoint(new Point(processName).tag('type', 'process').floatField('value', 0));
-  } else if (lastProcess !== processName) {
-    writeApi.writePoint(new Point(lastProcess).tag('type', 'process').floatField('value', 0));
-    writeApi.writePoint(new Point(processName).tag('type', 'process').floatField('value', 0));
+const writeProcessUsage = (name, { status, ...data }) => {
+  if (status === STATUS.NEW) {
+    writeApi.writePoint(createPoint(name, { cpu: 0, ram: 0 }, 'process'));
   }
-  writeApi.writePoint(new Point(processName).tag('type', 'process').floatField('value', 1));
-
-  lastProcess = processName;
+  writeApi.writePoint(createPoint(name, data, 'process'));
 }
 
 const getStats = async () => {
   date = new Date();
 
+  // Get total number of effective processors (this reflects number of cores)
+  if (!totalProcessors) {
+    try {
+      const { NumberOfLogicalProcessors = 1 } = await getJsonFromCmd(totalProcessorsQuery);
+      totalProcessors = NumberOfLogicalProcessors;
+    } catch (error) {
+      console.log('Unable to determine number of logical processors', error);
+    }
+  }
+
+  // Take a mini sample of processor activity and process the results
   try {
-    const topProcess = await getJsonFromCmd(processesQuery);
-    ({ Name } = await getJsonFromCmd(processNameQuery(topProcess.IDProcess)));
+    const processorActivityJson = await getJsonFromCmd(processesQueryV2);
+    let topProcess = '';
+    processorActivity = processorActivityJson.reduce((acc, cv) => {
+      const slugifiedName = slugify(cv.InstanceName, { strict: true, lower: true });
+      const cookedValueDividedByProcessors = parseFloat((cv.CookedValue / totalProcessors).toFixed(2));
+
+      topProcess = topProcess && acc[topProcess].cpu >= cookedValueDividedByProcessors ? topProcess : slugifiedName;
+
+      return {
+        ...acc,
+        [slugifiedName]: {
+          cpu: cookedValueDividedByProcessors,
+          ram: 0, // TODO
+          status: lastProcesses.includes(slugifiedName) ? STATUS.EXISTS : STATUS.NEW
+        },
+      };
+    }, {});
+    
+    const currentProcesses = Object.keys(processorActivity);
+    lastProcesses.forEach(p => {
+      if (!currentProcesses.includes(p)) {
+        processorActivity[p] = { cpu: 0, ram: 0, status: STATUS.RIP };
+      }
+    });
+
+    lastProcesses = currentProcesses;
+    topProcessName = topProcess;
+  } catch (error) {
+    console.log('Unable to fetch processor activity', error);
+  }
+
+  // Get system stats
+  try {
     const sysStatsRaw = await getJsonFromCmd(sysStatsQuery);
 
     sysStats = sysStatsRaw.reduce((acc, cv) => {
@@ -95,8 +135,7 @@ const getStats = async () => {
         [`${key}Max`]: parseFloat(cv.Max.toFixed(2)), 
       }
     }, {
-      topProcessName: Name,
-      topProcessPid: topProcess.IDProcess,
+      topProcessName,
       dateTime: date.toJSON(),
     });
   } catch (error) {
@@ -121,20 +160,23 @@ const getStats = async () => {
         used: sysStats.ramDataVal,
       }));
 
-      writeProcessUsage(slugify(Name, { strict: true, lower: true }));
+      for (const [name, data] of Object.entries(processorActivity)) {
+        writeProcessUsage(name, data);
+      }
     }
   } catch (error) {
     console.log('Error sending stats to influx', error);
-  }
-
-  if (!hasWritten) {
-    console.log('Successfully did a thing, yay!', date);
   }
 
   try {
     splitStats(sysStats);
   } catch (err) {
     console.log('Error splitting the stats', error);
+  }
+
+  if (!hasWritten) {
+    console.log('Successfully did a thing, yay!', date);
+    hasWritten = true;
   }
 }
 
