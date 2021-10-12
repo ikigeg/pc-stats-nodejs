@@ -14,11 +14,13 @@ const writeApi = client.getWriteApi(INFLUX_ORG, INFLUX_BUCKET);
 writeApi.useDefaultTags({ host: INFLUX_TAG_HOSTNAME })
 
 const sysStatsFields = 'Parent, Name, SensorType, Value, Max, Min, Identifier';
+const sysNames = ['CPU Total', 'CPU Package', 'GPU Power', 'GPU Core', 'GPU Memory Used', 'GPU Fan', 'Used Memory', 'Fan Control #1'];
+const sysSensorTypes = ['Load', 'Temperature', 'Control', 'Power', 'Data'];
 const sysStatsWql = 'select ' + sysStatsFields + ' from Sensor ' +
-  'where (Parent = "/intelcpu/0" or Parent = "/nvidiagpu/0") ' +
-  'and (Name = "CPU Total" or Name = "CPU Package" or Name = "GPU Power" or Name = "GPU Core") ' +
-  'and (SensorType = "Load" or SensorType = "Temperature" or SensorType = "Power")';
+  'where (' + sysNames.map(n => `Name = "${n}"`).join(' or ') + ') ' +
+  'and (' + sysSensorTypes.map(t => `SensorType = "${t}"`).join(' or ') + ')';
 const sysStatsQuery = `get-wmiobject -namespace root\\OpenHardwareMonitor -query '${sysStatsWql}' | select-object ${sysStatsFields}`;
+console.log('sysStatsQuery', sysStatsQuery);
 
 const processesQuery = 'Get-WmiObject Win32_PerfFormattedData_PerfProc_Process' + 
 '| where-object{ $_.Name -ne "_Total" -and $_.Name -ne "Idle"}' +
@@ -33,7 +35,6 @@ async function getJsonFromCmd(cmd, opts = { shell: 'powershell.exe', windowsHide
 }
 
 const dataPoints = {};
-let sysStats = {};
 let hasWritten = false;
 
 const totalDataPoints = 10;
@@ -61,6 +62,9 @@ function createPoint(measurement, usage) {
 }
 
 let lastProcess = '';
+let Name;
+let date;
+let sysStats = {};
 const writeProcessUsage = (processName) => {
   if (lastProcess === '') {
     writeApi.writePoint(new Point(processName).tag('type', 'process').floatField('value', 0));
@@ -74,15 +78,15 @@ const writeProcessUsage = (processName) => {
 }
 
 const getStats = async () => {
-  let Name;
+  date = new Date();
 
   try {
-    const date = new Date();
     const topProcess = await getJsonFromCmd(processesQuery);
     ({ Name } = await getJsonFromCmd(processNameQuery(topProcess.IDProcess)));
     const sysStatsRaw = await getJsonFromCmd(sysStatsQuery);
+
     sysStats = sysStatsRaw.reduce((acc, cv) => {
-      const type = cv.Parent.includes('intelcpu') ? 'cpu' : 'gpu';
+      const type = cv.Parent === '/ram' ? 'ram' : cv.Name.toLowerCase().substr(0, 3);
       const prop = cv.SensorType.substr(0, 4);
       const key = `${type}${prop}`;
       return {
@@ -105,11 +109,16 @@ const getStats = async () => {
         temp: sysStats.gpuTempVal,
         power: sysStats.gpuPoweVal,
         load: sysStats.gpuLoadVal,
+        fan: sysStats.gpuContVal,
       }));
       writeApi.writePoint(createPoint('cpu', {
         temp: sysStats.cpuTempVal,
         power: sysStats.cpuPoweVal,
         load: sysStats.cpuLoadVal,
+        fan: sysStats.fanContVal
+      }));
+      writeApi.writePoint(createPoint('ram', {
+        used: sysStats.ramDataVal,
       }));
 
       writeProcessUsage(slugify(Name, { strict: true, lower: true }));
@@ -127,13 +136,12 @@ const getStats = async () => {
   } catch (err) {
     console.log('Error splitting the stats', error);
   }
-  
 }
 
 let timerId = setTimeout(async function tick() {
   await getStats();
-  timerId = setTimeout(tick, 4000);
-}, 2000);
+  timerId = setTimeout(tick, 5000);
+}, 1000);
 
 // const app = uWS.App().ws('/*', { 
 //   compression: uWS.SHARED_COMPRESSOR,
